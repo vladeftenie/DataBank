@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Iinclude -Wextra -pthread
-LIBS = -lzmq -pthread -lmysqlclient
+LIBS = -lzmq -pthread -lmysqlcppconn
 
 SRC = $(wildcard src/*.cpp)
 OBJ = $(SRC:.cpp=.o)
