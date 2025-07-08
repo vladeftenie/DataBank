@@ -1,0 +1,13 @@
+# binare
+*.o
+*.out
+*.exe
+*.log
+
+# editori
+.vscode/
+*.swp
+*.swo
+
+# build
+build/
