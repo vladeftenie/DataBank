@@ -32,3 +32,5 @@ using namespace sql;
 
 ClientInfo unpack(const string &s);
 string pack(const ClientInfo &c);
+
+void print(const ClientInfo &c);

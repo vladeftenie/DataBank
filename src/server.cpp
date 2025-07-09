@@ -26,10 +26,28 @@ void signal_handler(int signal) {
     }
 }
 
+void send_pack(const ClientInfo &c) { //TODO: to use
+    string packed = pack(c);
+    message_t request(packed.begin(), packed.end());
+    socket.send(request, send_flags::none);
+}
+
 void parse(ClientInfo &c, unique_ptr<Connection> &con) {
+        switch (c.action) {
+        case CONSUMA:
+            
+        case ASK:
+            
+        case ADD_MONEY:
+            
+        case ADD_DATE:
+            
+        default:
+            return "none";
+    }
     try {
         unique_ptr<PreparedStatement> stmt(
-            con->prepareStatement("SELECT status, pret FROM files WHERE filename = ?")
+            con->prepareStatement("SELECT  FROM clients WHERE filename = ?")
         );
         // stmt->setString(1, p.filename);
         
@@ -56,18 +74,86 @@ void parse(ClientInfo &c, unique_ptr<Connection> &con) {
     } catch (sql::SQLException &e) {
         // cerr << "[DB] Eroare la interogare în DB: " << e.what() << " pentru " << p.filename << endl;
     }
+    cout << "DA\n\n\n\n";
 }
 
 void listener(int id) {
+    socket.set(sockopt::rcvtimeo, 100);
+    while(running) {
+        message_t identity, request;
+        if(!socket.recv(identity)) {
+            if(!running) break;
+            continue;
+        }
+        if(!socket.recv(request)) {
+            if(!running) break;
+            continue;
+        }
 
+        string content((char *)request.data(), request.size());
+        ClientInfo c = unpack(content);
+        c.zmq_identity = string((char *)identity.data(), identity.size());
+        cout << "[Listener " << id << "]\n";
+        print(c);
+
+        {
+            lock_guard<mutex> lock(req_mtx);
+            req.push(c);
+        }
+        req_cv.notify_one();
+    }
 }
 
 void parser(int id) {
+    unique_ptr<Connection> local_con = connect_to_db();
 
+    while(running) {
+        ClientInfo c;
+        {
+            unique_lock<mutex> lock(req_mtx);
+            req_cv.wait(lock, [] { return !req.empty() || !running; });
+            if(!running && req.empty()) break;
+            if(req.empty()) continue;
+
+            c = req.front();
+            req.pop();
+        }
+
+        cout << "[Worker " << id << "] Procesare " << c.cod << endl;
+        parse(c, local_con);
+
+        {
+            lock_guard<mutex> lock(rsp_mtx);
+            rsp.push(c);
+        }
+        rsp_cv.notify_one();
+    }
 }
 
 void sender(int id) {
+    while(running) {
+        ClientInfo c;
+        {
+            unique_lock<mutex> lock(rsp_mtx);
+            rsp_cv.wait(lock, [] { return !rsp.empty() || !running; });
+            if (!running) break;
+            
+            c = rsp.front();
+            rsp.pop();
+        }
 
+        message_t identity(c.zmq_identity.begin(), c.zmq_identity.end());
+        string packed = pack(c);
+        message_t response(packed.begin(), packed.end());
+        
+        {
+            lock_guard<mutex> lock(socket_mtx);  // 🔒
+            socket.send(identity, send_flags::sndmore);
+            socket.send(response, send_flags::none);
+        }
+        
+        cout << "[Sender " << id << "] Trimis răspuns pentru " << c.cod << endl;
+    }
 }
 
 int main() {
@@ -101,5 +187,9 @@ int main() {
     for(thread &s : senders) {
         s.join();
     }
+
+    socket.close();
+    context.shutdown();
+    context.close();
     return 0;
 }

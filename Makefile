@@ -1,18 +1,22 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Iinclude -Wextra -pthread
-LIBS = -lzmq -pthread -lmysqlcppconn
+CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude -pthread
+LDFLAGS = -lzmq -lmysqlcppconn -pthread
 
-SRC = $(wildcard src/*.cpp)
-OBJ = $(SRC:.cpp=.o)
+COMMON_SRC = src/utils.cpp src/parse.cpp
+COMMON_OBJ = $(COMMON_SRC:.cpp=.o)
+
 TARGETS = server client
 
-all: $(BIN)
+all: $(TARGETS)
 
-server: src/server.cpp
-	$(CXX) $(CXXFLAGS) -o server src/server.cpp $(LIBS)
+server: src/server.cpp $(COMMON_OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-client: src/client.cpp
-	$(CXX) $(CXXFLAGS) -o client src/client.cpp $(LIBS)
+client: src/client.cpp $(COMMON_OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(TARGETS) src/*.o logs/*.log

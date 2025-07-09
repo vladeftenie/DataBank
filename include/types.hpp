@@ -10,16 +10,26 @@ enum Role {
 };
 
 enum Status {
+    REQ,
     PENDING,
     PROCESSED,
     ERROR
 };
 
+enum ClientAction {
+    CONSUMA,
+    ASK,
+    ADD_DATE,
+    ADD_MONEY
+};
+
 struct ClientInfo {
-    string zmq_identity;
+    string zmq_identity = "";
     Role role;
-    int id;
+    int id = 0;
     string cod;
     Status status;
-    string payload;
+    string payload = "";
+    ClientAction action;
+    double value = 0.0;
 };

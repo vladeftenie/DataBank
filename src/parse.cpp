@@ -26,14 +26,15 @@ Role string_to_role(const string &s) {
     } else if (s == "admin") {
         r = ADMIN;
     } else {
-        cerr << "Error in string_to_role!\n";
-        return;
+        throw invalid_argument("Invalid role string: " + s);
     }
     return r;
 }
 
 string status_to_string(Status s) {
     switch (s) {
+        case REQ:
+            return "requested";
         case PENDING:
             return "pending";
         case PROCESSED:
@@ -47,15 +48,47 @@ string status_to_string(Status s) {
 
 Status string_to_status(const string &s) {
     Status status;
-    if (s == "pending") {
+    if (s == "requested") {
+        status = REQ;
+    } else if (s == "pending") {
         status = PENDING;
     } else if (s == "processed") {
         status = PROCESSED;
     } else if (s == "error") {
         status = ERROR;
     } else {
-        cerr << "Error in string_to_status!\n";
-        return;
+        throw invalid_argument("Invalid status string: " + s);
     }
     return status;
+}
+
+string clientAction_to_string(ClientAction a) {
+    switch (a) {
+        case CONSUMA:
+            return "consuma";
+        case ASK:
+            return "ask";
+        case ADD_MONEY:
+            return "add_money";
+        case ADD_DATE:
+            return "add_date";
+        default:
+            return "none";
+    }
+}
+
+ClientAction string_to_clientAction(const string &s) {
+    ClientAction a;
+    if (s == "consuma") {
+        a = CONSUMA;
+    } else if (s == "ask") {
+        a = ASK;
+    } else if (s == "add_money") {
+        a = ADD_MONEY;
+    } else if (s == "add_date") {
+        a = ADD_DATE;
+    } else {
+        throw invalid_argument("Invalid status string: " + s);
+    }
+    return a;
 }
