@@ -1,6 +1,6 @@
 #include "../include/utils.hpp"
 #include "../include/parse.hpp"
-// ./client 1 2080... ask bani
+// ./admin 1 change 2080... nume date_consumate date_available bani
 int main(int argc, char *argv[]) {
     if(argc < 3) {
         cerr << "Not enough args!\n";
@@ -8,23 +8,31 @@ int main(int argc, char *argv[]) {
     }
 
     ClientInfo c;
-    c.role = CLIENT;
+    c.role = ADMIN;
     c.id = stoi(argv[1]);
-    c.cod = argv[2];
-    c.status = REQ;
-    c.action = string_to_clientAction(argv[3]);
-    if(c.action == ASK) {
-        c.payload = argv[4];
+    c.action = string_to_clientAction(argv[2]);
+    if (c.action == LIST) {
+        cout << "DA\n";
     } else {
-        c.value = stod(argv[4]);
+        c.cod = argv[3];
+        if (c.action == ASK) {
+            c.payload = argv[4];
+        } else if (c.action == CHANGE) {
+           c.payload = string(argv[4]) + " " + string(argv[5]) + " " + string(argv[6]) + " " + string(argv[7]) + " " + string(argv[8]);
+        } else if (c.action == ADD_DATE || c.action == ADD_BANI) {
+           c.value = stod(argv[4]);
+        }
     }
+
+    c.status = REQ;
 
     context_t context(NUM_CONTEXT);
     socket_t socket(context, socket_type::dealer);
-    socket.set(sockopt::routing_id, "client-" + to_string(c.id));
+    socket.set(sockopt::routing_id, "admin-" + to_string(c.id));
     socket.connect("tcp://localhost:5555");
 
     string packed = pack(c);
+    cout << packed << "\n";
     message_t request(packed.begin(), packed.end());
     socket.send(request, send_flags::none);
 

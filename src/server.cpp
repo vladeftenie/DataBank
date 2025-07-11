@@ -26,55 +26,254 @@ void signal_handler(int signal) {
     }
 }
 
-void send_pack(const ClientInfo &c) { //TODO: to use
+void send_pack(ClientInfo &c) { //TODO: to use
     string packed = pack(c);
     message_t request(packed.begin(), packed.end());
     socket.send(request, send_flags::none);
 }
 
+void parse_change(const string &s, string &nume, int &date_c, int &date_a, double &bani) {
+    size_t pos1 = s.find(' ');
+    size_t pos2 = s.find(' ', pos1 + 1);
+    size_t pos3 = s.find(' ', pos2 + 1);
+    size_t pos4 = s.find(' ', pos3 + 1);
+
+    nume = s.substr(0, pos2);
+    date_c = stoi(s.substr(pos2 + 1, pos3 - pos2 - 1));
+    date_a = stoi(s.substr(pos3 + 1, pos4 - pos3 - 1));
+    cout << date_c << " " << date_a << "\n";
+    bani = stod(s.substr(pos4 + 1));
+}
+
 void parse(ClientInfo &c, unique_ptr<Connection> &con) {
-        switch (c.action) {
-        case CONSUMA:
-            
-        case ASK:
-            
-        case ADD_MONEY:
-            
-        case ADD_DATE:
-            
-        default:
-            return "none";
-    }
-    try {
+    if (c.action == CONSUMA) {
+        if (c.role == ADMIN) {
+            c.payload = "Comanda inexistenta";
+            c.status = ERROR;
+            return;
+        }
+        double cerere = c.value;
+        
         unique_ptr<PreparedStatement> stmt(
-            con->prepareStatement("SELECT  FROM clients WHERE filename = ?")
+            con->prepareStatement("SELECT date_available, bani FROM clients WHERE imsi = ? OR msisdn = ?")
         );
-        // stmt->setString(1, p.filename);
+
+        stmt->setString(1, c.cod);
+        stmt->setString(2, c.cod);
+
+        unique_ptr<ResultSet> res(stmt->executeQuery());
+
+        if (!res->next()) {
+            c.payload = "Client inexistent";
+            c.status = ERROR;
+            return;
+        }
+
+        double disponibile = res->getDouble("date_available");
+        double bani = res->getDouble("bani");
+
+        if (disponibile >= cerere) {
+            unique_ptr<PreparedStatement> update(
+                con->prepareStatement("UPDATE clients SET date_available = ?, date_consumate = date_consumate + ? WHERE imsi = ? OR msisdn = ?")
+            );
+            update->setInt(1, disponibile - cerere);
+            update->setInt(2, cerere);
+            update->setString(3, c.cod);
+            update->setString(4, c.cod);
+            update->executeUpdate();
+
+            c.payload = "Ai consumat " + to_string(cerere) + " MB. Mai ai " + to_string(disponibile - cerere) + " MB disponibili luna asta.";
+            c.status = PROCESSED;
+            c.value = 0.0;
+        } else {
+            double lipsa = cerere - disponibile;
+            double cost = lipsa * 0.05;     // 100MB = 5$
+
+            if (bani >= cost) {
+                unique_ptr<PreparedStatement> update(
+                    con->prepareStatement("UPDATE clients SET date_available = 0, bani = bani - ?, date_consumate = date_consumate + ? WHERE imsi = ? OR msisdn = ?")
+                );
+                update->setDouble(1, cost);
+                update->setInt(2, cerere);
+                update->setString(3, c.cod);
+                update->setString(4, c.cod);
+                update->executeUpdate();
+
+                c.payload = "Ai consumat " + to_string(cerere) + " MB.\nAi platit " + to_string(cost) + " bani pentru " + to_string(lipsa) + " MB in plus.";
+                c.status = PROCESSED;
+                c.value = 0.0;
+            } else {
+                c.payload = "Nu ai suficiente date sau bani. \nTrebuie sa platesti " + to_string(cost) + " bani pentru a consuma " + to_string(cerere) + " MB.";
+                c.status = PENDING;
+            }
+        }
+    } else if (c.action == ASK) {
+        string col = c.payload;
+        unordered_set<string> allowed = {"bani", "date_consumate", "date_available"};
+        if (!allowed.count(col)) {
+            c.payload = "Coloană invalidă";
+            c.status = ERROR;
+        }
+    
+        string query = "SELECT " + col + " FROM clients WHERE imsi = ? OR msisdn = ?";
+        unique_ptr<PreparedStatement> stmt(
+            con->prepareStatement(query)
+        );
+        stmt->setString(1, c.cod);
+        stmt->setString(2, c.cod);
         
         unique_ptr<ResultSet> res(stmt->executeQuery());
-        
-        if (res->next()) {
-            string status = res->getString("status");
-            double pret = res->getDouble("pret");
-            
-            if (status == "finished") {
-                cout << "[DB] Fișierul este finalizat. Preț: " << pret << endl;
-                // p.pret = pret;
-                // p.status = FIN;
-            } else {
-                cout << "[DB] Fișierul NU este finalizat. Status: " << status << ". Preț: 0.00" << endl;
-                // p.pret = 0.00;
-                // p.status = PRS;
-            }
-        } else {
-            // cout << "[DB] Fișierul nu a fost găsit în DB: " << p.filename << endl;
-            // p.pret = 0.00;
-            // p.status = NOT;
+    
+        if (!res->next()) {
+            c.payload = "Client inexistent";
+            c.status = ERROR;
+            return;
         }
-    } catch (sql::SQLException &e) {
-        // cerr << "[DB] Eroare la interogare în DB: " << e.what() << " pentru " << p.filename << endl;
+
+        double val = res->getDouble(col);
+        cout << col << " = " << val << "\n";
+        c.value = val;
+
+        c.status = PROCESSED;
+    } else if (c.action == ADD_BANI) {
+        if (c.role == ADMIN) {
+            unique_ptr<PreparedStatement> update(
+                con->prepareStatement("UPDATE clients SET bani = bani + ? WHERE imsi = ? OR msisdn = ?")
+            );
+            update->setDouble(1, c.value);
+            update->setString(2, c.cod);
+            update->setString(3, c.cod);
+            int affectedRows = update->executeUpdate();
+
+            if (!affectedRows) {
+                c.status = ERROR;
+                c.payload = "Client inexistent";
+                return;
+            }
+            c.status = PROCESSED;
+        } else {
+            unique_ptr<PreparedStatement> stmt(
+                con->prepareStatement("INSERT INTO pending_requests (imsi, msisdn, request_type, payload) VALUES (?, ?, ?, ?)")
+            );
+        
+            if (c.cod.size() < 13) {
+                stmt->setString(1, c.cod);
+                stmt->setNull(2, DataType::VARCHAR);
+            } else {
+                stmt->setNull(1, DataType::VARCHAR);
+                stmt->setString(2, c.cod);
+            }
+            stmt->setString(3, "ADD_BANI");
+            stmt->setString(4, to_string(c.value));
+            stmt->executeUpdate();
+    
+            c.status = PENDING;
+        }
+
+    } else if (c.action == ADD_DATE) {
+        if (c.role == ADMIN) {
+            unique_ptr<PreparedStatement> update(
+                con->prepareStatement("UPDATE clients SET date_available = date_available + ? WHERE imsi = ? OR msisdn = ?")
+            );
+            update->setInt(1, c.value);
+            update->setString(2, c.cod);
+            update->setString(3, c.cod);
+            int affectedRows = update->executeUpdate();
+
+            if (!affectedRows) {
+                c.status = ERROR;
+                c.payload = "Client inexistent";
+                return;
+            }
+            c.status = PROCESSED;
+        } else {
+            unique_ptr<PreparedStatement> stmt(
+                con->prepareStatement("INSERT INTO pending_requests (imsi, msisdn, request_type, payload) VALUES (?, ?, ?, ?)")
+            );
+        
+            if (c.cod.size() < 13) {
+                stmt->setString(1, c.cod);
+                stmt->setNull(2, DataType::VARCHAR);
+            } else {
+                stmt->setNull(1, DataType::VARCHAR);
+                stmt->setString(2, c.cod);
+            }
+            stmt->setString(3, "ADD_DATE");
+            stmt->setString(4, to_string(c.value));
+            stmt->executeUpdate();
+    
+            c.status = PENDING;
+        }
+    } else if (c.action == CHANGE) {
+        if (c.role == ADMIN) {
+            unique_ptr<PreparedStatement> update(
+                con->prepareStatement("UPDATE clients SET nume_client = ?, date_consumate = ?, date_available = ?, bani = ? WHERE imsi = ? OR msisdn = ?")
+            );
+
+            string nume;
+            int date_c, date_a;
+            double bani;
+            parse_change(c.payload, nume, date_c, date_a, bani);
+            update->setString(1, nume);
+            update->setInt(2, date_c);
+            update->setInt(3, date_a);
+            update->setDouble(4, bani);
+            update->setString(5, c.cod);
+            update->setString(6, c.cod);
+            int affectedRows = update->executeUpdate();
+
+            if (!affectedRows) {
+                c.status = ERROR;
+                c.payload = "Client inexistent";
+                return;
+            }
+            c.status = PROCESSED;
+        }
+    } else if (c.action == REMOVE) {
+        unique_ptr<PreparedStatement> update(
+            con->prepareStatement("DELETE FROM clients WHERE imsi = ? OR msisdn = ?")
+        );
+
+        update->setString(1, c.cod);
+        update->setString(2, c.cod);
+        int affectedRows = update->executeUpdate();
+
+        if (!affectedRows) {
+            c.status = ERROR;
+            c.payload = "Client inexistent";
+            return;
+        }
+        c.status = PROCESSED;
+    } else if (c.action == LIST) {
+        unique_ptr<PreparedStatement> stmt(
+            con->prepareStatement("SELECT * FROM clients")
+        );
+
+        unique_ptr<ResultSet> res(stmt->executeQuery());
+
+        if (!res->next()) {
+            c.payload = "Client inexistent";
+            c.status = ERROR;
+            return;
+        }
+        
+        string payload = "";
+        do {
+            payload += "$ ";
+            // payload += res->getString("id") + " | ";
+            payload += res->getString("imsi") + " $ ";
+            payload += res->getString("msisdn") + " $ ";
+            payload += res->getString("nume_client") + " $ ";
+            payload += to_string(res->getDouble("date_consumate")) + " $ ";
+            payload += to_string(res->getDouble("date_available")) + " $ ";
+            payload += to_string(res->getDouble("bani")) + " $\n";
+        } while (res->next());
+        c.payload = payload;
+        c.status = PROCESSED;
+        print(c);
+    } else {
+        cout << "Nu\n";
     }
-    cout << "DA\n\n\n\n";
 }
 
 void listener(int id) {

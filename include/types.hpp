@@ -20,14 +20,17 @@ enum ClientAction {
     CONSUMA,
     ASK,
     ADD_DATE,
-    ADD_MONEY
+    ADD_BANI,
+    CHANGE,
+    REMOVE,
+    LIST
 };
 
 struct ClientInfo {
     string zmq_identity = "";
     Role role;
     int id = 0;
-    string cod;
+    string cod = "";
     Status status;
     string payload = "";
     ClientAction action;

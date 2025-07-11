@@ -68,10 +68,16 @@ string clientAction_to_string(ClientAction a) {
             return "consuma";
         case ASK:
             return "ask";
-        case ADD_MONEY:
-            return "add_money";
+        case ADD_BANI:
+            return "add_bani";
         case ADD_DATE:
             return "add_date";
+        case CHANGE:
+            return "change";
+        case REMOVE:
+            return "remove";
+        case LIST:
+            return "list";
         default:
             return "none";
     }
@@ -83,10 +89,16 @@ ClientAction string_to_clientAction(const string &s) {
         a = CONSUMA;
     } else if (s == "ask") {
         a = ASK;
-    } else if (s == "add_money") {
-        a = ADD_MONEY;
+    } else if (s == "add_bani") {
+        a = ADD_BANI;
     } else if (s == "add_date") {
         a = ADD_DATE;
+    } else if (s == "change") {
+        a = CHANGE;
+    } else if (s == "remove") {
+        a = REMOVE;
+    } else if (s == "list") {
+        a = LIST;
     } else {
         throw invalid_argument("Invalid status string: " + s);
     }

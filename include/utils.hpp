@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <atomic>
+#include <unordered_set>
 
 #include <mysql_driver.h>
 #include <mysql_connection.h>
@@ -26,7 +27,6 @@
 #define PARSER_THREADS 4
 #define SENDER_THREADS 2
 
-// using namespace std;
 using namespace zmq;
 using namespace sql;
 
